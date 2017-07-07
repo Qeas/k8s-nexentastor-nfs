@@ -1,0 +1,4 @@
+FROM scratch
+COPY nexenta-stor-provisioner /
+CMD ["/nexenta-stor-provisioner"]
+#CMD ["sleep", "10000000"]

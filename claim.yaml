@@ -1,0 +1,12 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: nexenta-stor
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "nexenta-stor"
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Mi

@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1alpha1
+metadata:
+  name: run-nexenta-stor-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: nexenta-stor-provisioner
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: nexenta-stor-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io

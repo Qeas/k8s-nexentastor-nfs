@@ -1,0 +1,33 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: nexenta-stor-provisioner
+spec:
+  serviceAccountName: nexenta-stor-provisioner
+  # automountServiceAccountToken: false
+  containers:
+    - name: nexenta-stor-provisioner
+      image: nexenta-stor-provisioner:latest
+      imagePullPolicy: "IfNotPresent"
+      env:
+        - name: NEXENTA_HOSTNAME
+          value: 192.168.122.218
+        - name: NEXENTA_HOSTPORT
+          value: "8443"
+        - name: NEXENTA_PASSWORD
+          value: ""
+        - name: NEXENTA_USERNAME
+          value: "admin"
+        - name: NEXENTA_HOSTPOOL
+          value: nfs
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      volumeMounts:
+        - name: src
+          mountPath: "/home/enikher/go/src/nexenta/"
+  volumes:
+    - name: src
+      hostPath:
+        path: "/home/enikher/go/src/nexenta/"
