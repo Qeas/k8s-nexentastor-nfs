@@ -17,7 +17,6 @@ Check variable in pod.yaml and create a pool with the name give in pod.yaml NEXE
 # kubectl create –f pod.yaml
 
 
-
 You should see:
 
 po/nexenta-stor-provisioner   1/1       Running   0
@@ -62,5 +61,3 @@ tmpfs                     5.9G         0      5.9G   0% /proc/timer_stats
 tmpfs                     5.9G         0      5.9G   0% /proc/sched_debug
 tmpfs                     5.9G         0      5.9G   0% /sys/firmware
 / #
-
-
