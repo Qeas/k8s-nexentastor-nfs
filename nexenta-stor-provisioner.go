@@ -30,7 +30,7 @@ import (
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/pkg/api/v1"
     "k8s.io/client-go/rest"
-    RestClient "nexenta/pkg/client"
+    RestClient "github.com/qeas/k8s-nexentastor-nfs/pkg/client"
     "strconv"
     "strings"
     "syscall"
