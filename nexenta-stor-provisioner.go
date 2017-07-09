@@ -17,28 +17,43 @@ limitations under the License.
 package main
 
 import (
-    "errors"
     "flag"
-    "fmt"
     "os"
     "time"
 
     "github.com/golang/glog"
     "github.com/kubernetes-incubator/external-storage/lib/controller"
-    metav1 "github.com/kubernetes/apimachinery/pkg/apis/meta/v1"
-    "github.com/kubernetes/apimachinery/pkg/util/wait"
-    "github.com/kubernetes/client-go/kubernetes"
-    "github.com/kubernetes/client-go/pkg/api/v1"
-    "github.com/kubernetes/client-go/rest"
-    RestClient "github.com/qeas/k8s-nexentastor-nfs/pkg/client"
+    // "github.com/kubernetes-incubator/external-storage/vendor/k8s.io/client-go/pkg/api/v1"
+    "k8s.io/client-go/pkg/api/v1"
+    "k8s.io/apimachinery/pkg/util/wait"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/rest"
     "strconv"
-    "strings"
     "syscall"
 )
+// import (
+//     "errors"
+//     "flag"
+//     "fmt"
+//     "os"
+//     "time"
+
+//     "github.com/golang/glog"
+//     "github.com/kubernetes-incubator/external-storage/lib/controller"
+//     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+//     "k8s.io/apimachinery/pkg/util/wait"
+//     "k8s.io/client-go/kubernetes"
+//     "k8s.io/api/core/v1"
+//     "k8s.io/client-go/rest"
+//     RestClient "github.com/qeas/k8s-nexentastor-nfs/pkg/client"
+//     "strconv"
+//     "strings"
+//     "syscall"
+// )
 
 const (
     resyncPeriod              = 15 * time.Second
-    provisionerName           = "nexenta.com/nexentastor-nfs"
+    provisionerName           = "nexenta.com/nexenta-stor"
     exponentialBackOffOnError = false
     failedRetryThreshold      = 5
     leasePeriod               = controller.DefaultLeaseDuration
@@ -46,11 +61,6 @@ const (
     renewDeadline             = controller.DefaultRenewDeadline
     termLimit                 = controller.DefaultTermLimit
 )
-
-type Auth struct {
-    Username string `json:"username"`
-    Password string `json:"password"`
-}
 
 type NexentaStorProvisioner struct {
     // Identity of this NexentaStorProvisioner, set to node's name. Used to identify
@@ -62,61 +72,10 @@ type NexentaStorProvisioner struct {
     auth     Auth
 }
 
-func (p *NexentaStorProvisioner) Request(method, endpoint string, data map[string]interface{}) (body []byte, err error) {
-    log.Debug("Issue request to Nexenta, endpoint: ", endpoint, " data: ", data, " method: ", method)
-    if p.Endpoint == "" {
-        log.Error("Endpoint is not set, unable to issue requests")
-        err = errors.New("Unable to issue json-rpc requests without specifying Endpoint")
-        return nil, err
-    }
-    datajson, err := json.Marshal(data)
-    if (err != nil) {
-        log.Error(err)
-    }
-    tr := &http.Transport{
-        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-    }
-    client := &http.Client{Transport: tr}
-    url := p.Endpoint + endpoint
-    req, err := http.NewRequest(method, url, nil)
-    if len(data) != 0 {
-        req, err = http.NewRequest(method, url, strings.NewReader(string(datajson)))
-    }
-    req.Header.Set("Content-Type", "application/json")
-    resp, err := client.Do(req)
-    if resp.StatusCode == 401 || resp.StatusCode == 403 {
-        log.Debug("No auth: ", resp.StatusCode)
-        auth, err := p.https_auth()
-        if err != nil {
-            log.Error("Error while trying to https login: %s", err)
-            return nil, err
-        }
-        req, err = http.NewRequest(method, url, nil)
-        if len(data) != 0 {
-            req, err = http.NewRequest(method, url, strings.NewReader(string(datajson)))
-        }
-        req.Header.Set("Content-Type", "application/json")
-        req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", auth))
-        resp, err = client.Do(req)
-        log.Debug("With auth: ", resp.StatusCode)
-    }
-
-    if err != nil {
-        log.Error("Error while handling request %s", err)
-        return nil, err
-    }
-    p.checkError(resp)
-    defer resp.Body.Close()
-    body, err = ioutil.ReadAll(resp.Body)
-    if (err != nil) {
-        log.Error(err)
-    }
-    if (resp.StatusCode == 202) {
-        body, err = p.resend202(body)
-    }
-    return body, err
+type Auth struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
 }
-
 
 func NewNexentaStorProvisioner() controller.Provisioner {
     nodeName := os.Getenv("NODE_NAME")
@@ -125,26 +84,26 @@ func NewNexentaStorProvisioner() controller.Provisioner {
     }
     hostname := os.Getenv("NEXENTA_HOSTNAME")
     if hostname == "" {
-        glog.Fatal("env variable NEXENTA_HOSTNAME is required")
+        glog.Fatal("env variable NEXENTA_HOSTNAME must be set to know whom to talk to")
     }
     port := os.Getenv("NEXENTA_HOSTPORT")
     if port == "" {
-        glog.Fatal("env variable NEXENTA_HOSTPORT is required")
+        glog.Fatal("env variable NEXENTA_HOSTPORT must be set to know whom to talk to")
     }
     pool := os.Getenv("NEXENTA_HOSTPOOL")
     if pool == "" {
-        glog.Fatal("env variable NEXENTA_POOL is required")
+        glog.Fatal("env variable NEXENTA_HOSTPOOL must be set to know whom to talk to")
     }
     username := os.Getenv("NEXENTA_USERNAME")
     if username == "" {
-        glog.Fatal("env variable NEXENTA_USERNAME is required")
+        glog.Fatal("env variable NEXENTA_USERNAME must be set to know whom to talk to")
     }
     // HACK this should go into a secert!
     password := os.Getenv("NEXENTA_PASSWORD")
     if password == "" {
-        glog.Fatal("env variable NEXENTA_PASSWORD is required")
+        glog.Fatal("env variable NEXENTA_PASSWORD must be set to know whom to talk to")
     }
-    auth := RestClient.Auth{Username: username, Password: password}
+    auth := Auth{Username: username, Password: password}
     port_int, _ := strconv.Atoi(port)
     return &NexentaStorProvisioner{
         identity: nodeName,
@@ -168,64 +127,14 @@ type NFS struct {
 }
 
 // Provision creates a storage asset and returns a PV object representing it.
-func (p *NexentaStorProvisioner) Provision(options controller.VolumeOptions) (*v1.PersistentVolume, error) {
-    base_url := fmt.Sprintf("https://%s:%d/", p.hostname, p.port)
-    rest_client := RestClient.RestClient{Auth: &p.auth, Baseurl: base_url}
-    new_path := fmt.Sprintf("%v/%v", p.pool, options.PVName)
-    new_network_path := fmt.Sprintf("/%v", new_path)
-    var new_file_system FileSystem
-    if storage_request, ok := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]; ok {
-        if size, ok := storage_request.AsInt64(); ok {
-            new_file_system = FileSystem{Path: new_path,
-                QuotaSize: size}
-        }
-    } else {
-        new_file_system = FileSystem{Path: new_path}
-    }
-    rest_client.Post("storage/filesystems", new_file_system)
-    new_nfs := NFS{FileSystem: new_path, Anon: "root"}
-    rest_client.Post("nas/nfs", new_nfs)
-    pv := &v1.PersistentVolume{
-        ObjectMeta: metav1.ObjectMeta{
-            Name: options.PVName,
-            Annotations: map[string]string{
-                "nexentaStorProvisionerIdentity": p.identity,
-            },
-        },
-        Spec: v1.PersistentVolumeSpec{
-            PersistentVolumeReclaimPolicy: options.PersistentVolumeReclaimPolicy,
-            AccessModes:                   options.PVC.Spec.AccessModes,
-            Capacity: v1.ResourceList{
-                v1.ResourceName(v1.ResourceStorage): options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)],
-            },
-            PersistentVolumeSource: v1.PersistentVolumeSource{
-                NFS: &v1.NFSVolumeSource{
-                    Server:   p.hostname,
-                    Path:     new_network_path,
-                    ReadOnly: false,
-                },
-            },
-        },
-    }
-
-    return pv, nil
+func (p *NexentaStorProvisioner) Provision(options controller.VolumeOptions) (v *v1.PersistentVolume, err error) {
+  
+    return 
 }
 
 // Delete removes the storage asset that was created by Provision represented
 // by the given PV.
 func (p *NexentaStorProvisioner) Delete(volume *v1.PersistentVolume) error {
-    ann, ok := volume.Annotations["nexentaStorProvisionerIdentity"]
-    if !ok {
-        return errors.New("identity annotation not found on PV")
-    }
-    if ann != p.identity {
-        return &controller.IgnoredError{"identity annotation on PV does not match ours"}
-    }
-
-    base_url := fmt.Sprintf("https://%s:%d/", p.hostname, p.port)
-    rest_client := RestClient.RestClient{Auth: &p.auth, Baseurl: base_url}
-    rest_client.Delete(fmt.Sprintf("storage/filesystems/%v",
-        strings.Replace(volume.Spec.PersistentVolumeSource.NFS.Path[1:], "/", "%2F", -1)))
 
     return nil
 }
