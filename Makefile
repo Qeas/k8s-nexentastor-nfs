@@ -20,8 +20,7 @@ image: nexenta-stor-provisioner
 	docker build -t $(IMAGE) -f Dockerfile.scratch .
 
 nexenta-stor-provisioner: $(shell find . -name "*.go")
-	glide install -v --strip-vcs
-	CGO_ENABLED=0 go build -gcflags '-l' -a -ldflags '-extldflags "-static"' -o nexenta-stor-provisioner .
+	glide install -v --strip-vcs CGO_ENABLED=0 go build -gcflags '-l' -a -ldflags '-extldflags "-static"' -o nexenta-stor-provisioner .
 
 .PHONY: clean
 clean:

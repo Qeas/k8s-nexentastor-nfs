@@ -17,61 +17,49 @@ limitations under the License.
 package main
 
 import (
+    "crypto/tls"
     "flag"
-    "os"
+    "errors"
     "time"
-
+    "fmt"
+    "encoding/json"
+    "net/http"
+    "net/url"
     "github.com/golang/glog"
     "github.com/kubernetes-incubator/external-storage/lib/controller"
-
     "k8s.io/client-go/pkg/api/v1"
-    "k8s.io/api/core/v1"
-    // "github.com/kubernetes-incubator/external-storage/vendor/k8s.io/client-go/pkg/api/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     "k8s.io/apimachinery/pkg/util/wait"
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/rest"
-    "strconv"
+    "os"
+    "path/filepath"
     "syscall"
 )
-// import (
-//     "errors"
-//     "flag"
-//     "fmt"
-//     "os"
-//     "time"
 
-//     "github.com/golang/glog"
-//     "github.com/kubernetes-incubator/external-storage/lib/controller"
-//     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-//     "k8s.io/apimachinery/pkg/util/wait"
-//     "k8s.io/client-go/kubernetes"
-//     "k8s.io/api/core/v1"
-//     "k8s.io/client-go/rest"
-//     RestClient "github.com/qeas/k8s-nexentastor-nfs/pkg/client"
-//     "strconv"
-//     "strings"
-//     "syscall"
-// )
 
 const (
     resyncPeriod              = 15 * time.Second
-    provisionerName           = "nexenta.com/nexenta-stor"
+    provisionerName           = "nexenta.com/nexentastor-nfs"
     exponentialBackOffOnError = false
     failedRetryThreshold      = 5
     leasePeriod               = controller.DefaultLeaseDuration
     retryPeriod               = controller.DefaultRetryPeriod
     renewDeadline             = controller.DefaultRenewDeadline
     termLimit                 = controller.DefaultTermLimit
+    // defaultParentFilesystem   = "kubernetes"
 )
 
 type NexentaStorProvisioner struct {
     // Identity of this NexentaStorProvisioner, set to node's name. Used to identify
     // "this" provisioner's PVs.
-    identity string
-    hostname string
-    port     int
-    pool     string
-    auth     Auth
+    Identity string
+    Hostname string
+    Port     string
+    Pool     string
+    Path     string
+    Endpoint string
+    Auth     Auth
 }
 
 type Auth struct {
@@ -86,37 +74,51 @@ func NewNexentaStorProvisioner() controller.Provisioner {
     }
     hostname := os.Getenv("NEXENTA_HOSTNAME")
     if hostname == "" {
-        glog.Fatal("env variable NEXENTA_HOSTNAME must be set to know whom to talk to")
+        glog.Fatal("env variable NEXENTA_HOSTNAME must be set to communicate with via Rest API")
     }
     port := os.Getenv("NEXENTA_HOSTPORT")
     if port == "" {
-        glog.Fatal("env variable NEXENTA_HOSTPORT must be set to know whom to talk to")
+        glog.Fatal("env variable NEXENTA_HOSTPORT must be set to communicate with via Rest API")
     }
     pool := os.Getenv("NEXENTA_HOSTPOOL")
     if pool == "" {
-        glog.Fatal("env variable NEXENTA_HOSTPOOL must be set to know whom to talk to")
+        glog.Fatal("env variable NEXENTA_HOSTPOOL must be set")
     }
     username := os.Getenv("NEXENTA_USERNAME")
     if username == "" {
-        glog.Fatal("env variable NEXENTA_USERNAME must be set to know whom to talk to")
+        glog.Fatal("env variable NEXENTA_USERNAME must be set")
     }
-    // HACK this should go into a secert!
     password := os.Getenv("NEXENTA_PASSWORD")
     if password == "" {
-        glog.Fatal("env variable NEXENTA_PASSWORD must be set to know whom to talk to")
+        glog.Fatal("env variable NEXENTA_PASSWORD must be set")
     }
+    // parentFS := os.Getenv("PARENT_FILESYSTEM")
+    // if parentFS == "" {
+    //     parentFS = defaultParentFilesystem
+    // }
     auth := Auth{Username: username, Password: password}
-    port_int, _ := strconv.Atoi(port)
     return &NexentaStorProvisioner{
-        identity: nodeName,
-        hostname: hostname,
-        port:     port_int,
-        pool:     pool,
-        auth:     auth,
+        Identity: nodeName,
+        Hostname: hostname,
+        Port:     port_int,
+        Pool:     pool,
+        Path:     filepath.Join(pool, parentFS),
+        Auth:     auth,
+        Endpoint: fmt.Sprintf("https://%s:%d/", hostname, port),
     }
 }
 
-var _ controller.Provisioner = &NexentaStorProvisioner{}
+// func InitializeNexentaStorProvisioner(p *NexentaStorProvisioner) controller.Provisioner {
+//         return &NexentaStorProvisioner{
+//         Identity: nodeName,
+//         Hostname: hostname,
+//         Port:     port_int,
+//         Pool:     pool,
+//         Path:     filepath.Join(pool, parentFS),
+//         Auth:     auth,
+//         Endpoint: fmt.Sprintf("https://%s:%d/", hostname, port),
+//     }
+// }
 
 type FileSystem struct {
     Path      string `json:"path"`
@@ -130,15 +132,187 @@ type NFS struct {
 
 // Provision creates a storage asset and returns a PV object representing it.
 func (p *NexentaStorProvisioner) Provision(options controller.VolumeOptions) (v *v1.PersistentVolume, err error) {
-  
+    glog.Debug("Creating volume %s", options.PVName)
+    data := map[string]interface{} {
+        "path": filepath.Join(p.Path, options.PVName),
+    }
+    p.Request("POST", "storage/filesystems", data)
+
+    data = make(map[string]interface{})
+    data["anon"] = "root"
+    data["filesystem"] = filepath.Join(p.Path, options.PVName)
+    p.Request("POST", "nas/nfs", data)
+    pv := &v1.PersistentVolume{
+        ObjectMeta: metav1.ObjectMeta{
+            Name: options.PVName,
+            Annotations: map[string]string{
+                "nexentaStorProvisionerIdentity": p.identity,
+            },
+        },
+        Spec: v1.PersistentVolumeSpec{
+            PersistentVolumeReclaimPolicy: options.PersistentVolumeReclaimPolicy,
+            AccessModes:                   options.PVC.Spec.AccessModes,
+            Capacity: v1.ResourceList{
+                v1.ResourceName(v1.ResourceStorage): options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)],
+            },
+            PersistentVolumeSource: v1.PersistentVolumeSource{
+                NFS: &v1.NFSVolumeSource{
+                    Server:   p.hostname,
+                    Path:     new_network_path,
+                    ReadOnly: false,
+                },
+            },
+        },
+    }
     return 
 }
 
 // Delete removes the storage asset that was created by Provision represented
 // by the given PV.
 func (p *NexentaStorProvisioner) Delete(volume *v1.PersistentVolume) error {
-
+    name := volume.ObjectMeta.Name
+    log.Debug("Deleting Volume ", name)
+    vname, err := p.GetVolume(name)
+    if vname == "" {
+        log.Error("Volume %s does not exist.", name)
+        return err
+    }
+    path := filepath.Join(p.Path, name) 
+    body, err := p.Request("DELETE",  filepath.Join("storage/filesystems/", url.QueryEscape(path)), nil)
+    if strings.Contains(string(body), "ENOENT") {
+        log.Debug("Error trying to delete volume ", name, " :", string(body))
+    }
     return nil
+}
+
+func (p *NexentaStorProvisioner) Request(method, endpoint string, data map[string]interface{}) (body []byte, err error) {
+    glog.Debug("Issue request to Nexenta, endpoint: ", endpoint, " data: ", data, " method: ", method)
+    if p.Endpoint == "" {
+        glog.Error("Endpoint is not set, unable to issue requests")
+        err = errors.New("Unable to issue json-rpc requests without specifying Endpoint")
+        return nil, err
+    }
+    datajson, err := json.Marshal(data)
+    if (err != nil) {
+        glog.Error(err)
+    }
+    tr := &http.Transport{
+        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+    }
+    client := &http.Client{Transport: tr}
+    url := p.Endpoint + endpoint
+    req, err := http.NewRequest(method, url, nil)
+    if len(data) != 0 {
+        req, err = http.NewRequest(method, url, strings.NewReader(string(datajson)))
+    }
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := client.Do(req)
+    glog.Debug("No auth: ", resp.StatusCode, resp.Body)
+    if resp.StatusCode == 401 || resp.StatusCode == 403 {
+        auth, err := p.https_auth()
+        if err != nil {
+            glog.Error("Error while trying to https login: %s", err)
+            return nil, err
+        }
+        req, err = http.NewRequest(method, url, nil)
+        if len(data) != 0 {
+            req, err = http.NewRequest(method, url, strings.NewReader(string(datajson)))
+        }
+        req.Header.Set("Content-Type", "application/json")
+        req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", auth))
+        resp, err = client.Do(req)
+        glog.Debug("With auth: ", resp.StatusCode, resp.Body)
+    }
+
+    if err != nil {
+        glog.Error("Error while handling request %s", err)
+        return nil, err
+    }
+    p.checkError(resp)
+    defer resp.Body.Close()
+    body, err = ioutil.ReadAll(resp.Body)
+    if (err != nil) {
+        glog.Error(err)
+    }
+    if (resp.StatusCode == 202) {
+        body, err = p.resend202(body)
+    }
+    return body, err
+}
+
+func (p *NexentaStorProvisioner) https_auth() (token string, err error){
+    data := map[string]string {
+        "username": p.Auth.Username,
+        "password": p.Auth.Password,
+    }
+    datajson, err := json.Marshal(data)
+    url := p.Endpoint + "auth/login"
+    req, err := http.NewRequest("POST", url, strings.NewReader(string(datajson)))
+    tr := &http.Transport{
+        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+    }
+    client := &http.Client{Transport: tr}
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := client.Do(req)
+    glog.Debug(resp.StatusCode, resp.Body)
+
+    if err != nil {
+        glog.Error("Error while handling request: %s", err)
+        return "", err
+    }
+    p.checkError(resp)
+    defer resp.Body.Close()
+    body, err := ioutil.ReadAll(resp.Body)
+    if (err != nil) {
+        glog.Error(err)
+    }
+    r := make(map[string]interface{})
+    err = json.Unmarshal(body, &r)
+    if (err != nil) {
+        err = fmt.Errorf("Error while trying to unmarshal json: %s", err)
+        return "", err
+    }
+    return r["token"].(string), err
+}
+
+func (p *NexentaStorProvisioner) resend202(body []byte) ([]byte, error) {
+    time.Sleep(1000 * time.Millisecond)
+    r := make(map[string][]map[string]string)
+    err := json.Unmarshal(body, &r)
+    if (err != nil) {
+        err = fmt.Errorf("Error while trying to unmarshal json %s", err)
+        return body, err
+    }
+
+    url := p.Endpoint + r["links"][0]["href"]
+    req, err := http.NewRequest("GET", url, nil)
+    tr := &http.Transport{
+        TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+    }
+    client := &http.Client{Transport: tr}
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := client.Do(req)
+    if err != nil {
+        err = fmt.Errorf("Error while handling request %s", err)
+        return body, err
+    }
+    defer resp.Body.Close()
+    p.checkError(resp)
+
+    if resp.StatusCode == 202 {
+        body, err = p.resend202(body)
+    }
+    body, err = ioutil.ReadAll(resp.Body)
+    return body, err
+}
+
+func (p *NexentaStorProvisioner) checkError(resp *http.Response) (err error) {
+    if resp.StatusCode > 401 {
+        body, err := ioutil.ReadAll(resp.Body)
+        err = fmt.Errorf("Got error in response from Nexenta, status_code: %s, body: %s", resp.StatusCode, string(body))
+        return err
+    }
+    return err
 }
 
 func main() {
