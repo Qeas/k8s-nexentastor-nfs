@@ -23,8 +23,10 @@ import (
 
     "github.com/golang/glog"
     "github.com/kubernetes-incubator/external-storage/lib/controller"
-    // "github.com/kubernetes-incubator/external-storage/vendor/k8s.io/client-go/pkg/api/v1"
+
     "k8s.io/client-go/pkg/api/v1"
+    "k8s.io/api/core/v1"
+    // "github.com/kubernetes-incubator/external-storage/vendor/k8s.io/client-go/pkg/api/v1"
     "k8s.io/apimachinery/pkg/util/wait"
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/rest"
@@ -169,6 +171,7 @@ func main() {
 
     // Start the provision controller which will dynamically provision nexentaStor
     // PVs
-    pc := controller.NewProvisionController(clientset, resyncPeriod, provisionerName, nexentaStorProvisioner, serverVersion.GitVersion, exponentialBackOffOnError, failedRetryThreshold, leasePeriod, renewDeadline, retryPeriod, termLimit)
+    pc := controller.NewProvisionController(clientset, provisionerName, nexentaStorProvisioner, serverVersion.GitVersion, exponentialBackOffOnError, failedRetryThreshold, leasePeriod, renewDeadline, retryPeriod, termLimit)
+    // pc := controller.NewProvisionController(clientset, resyncPeriod, provisionerName, nexentaStorProvisioner, serverVersion.GitVersion, exponentialBackOffOnError, failedRetryThreshold, leasePeriod, renewDeadline, retryPeriod, termLimit)
     pc.Run(wait.NeverStop)
 }
