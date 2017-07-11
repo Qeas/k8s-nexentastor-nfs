@@ -14,16 +14,14 @@
 
 .PHONY: image
 
-IMAGE?=nexenta-stor-provisioner
+IMAGE?=nexentastor5-nfs-provisioner
 
-image: nexenta-stor-provisioner
+image: nexentastor5-nfs-provisioner
 	docker build -t $(IMAGE) -f Dockerfile.scratch .
 
-nexenta-stor-provisioner: $(shell find . -name "*.go")
-	glide install -v --strip-vcs
-	CGO_ENABLED=0 go build -gcflags '-l' -a -ldflags '-extldflags "-static"' -o nexenta-stor-provisioner .
+nexentastor5-nfs-provisioner: 
+	go build nexentastor5-nfs-provisioner.go
 
 .PHONY: clean
 clean:
-	rm -rf vendor
-	rm nexenta-stor-provisioner
+	rm nexentastor5-nfs-provisioner

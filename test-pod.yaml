@@ -12,10 +12,10 @@ spec:
       - "-c"
       - "touch /mnt/SUCCESS && sleep 100000000 || exit 1"
     volumeMounts:
-      - name: nexenta-stor-pvc
+      - name: nexentastor5-nfs-pvc
         mountPath: "/mnt"
   restartPolicy: "Never"
   volumes:
-    - name: nexenta-stor-pvc
+    - name: nexentastor5-nfs-pvc
       persistentVolumeClaim:
-        claimName: nexenta-stor
+        claimName: nexentastor5-nfs

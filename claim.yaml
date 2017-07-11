@@ -1,9 +1,9 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: nexenta-stor
+  name: nexentastor5-nfs
   annotations:
-    volume.beta.kubernetes.io/storage-class: "nexenta-stor"
+    volume.beta.kubernetes.io/storage-class: "nexentastor5-nfs"
 spec:
   accessModes:
     - ReadWriteMany

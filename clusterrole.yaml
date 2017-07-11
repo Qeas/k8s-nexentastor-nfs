@@ -1,7 +1,7 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1alpha1
 metadata:
-  name: nexenta-stor-provisioner-runner
+  name: nexentastor5-nfs-provisioner-runner
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
@@ -20,5 +20,5 @@ rules:
     verbs: ["get"]
   - apiGroups: ["extensions"]
     resources: ["podsecuritypolicies"]
-    resourceNames: ["nexenta-stor-provisioner"]
+    resourceNames: ["nexentastor5-nfs-provisioner"]
     verbs: ["use"]
