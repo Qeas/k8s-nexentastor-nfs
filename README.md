@@ -37,8 +37,9 @@ Start a pod mounting the nfs
 
 That’s it! You should see the pod started and mounting the PV:
 
-``` kubectl exec -it test-pod sh
+``` kubectl exec -it test-pod sh ```
 
+```
 / # df -h
 
 Filesystem                Size      Used Available Use% Mounted on
