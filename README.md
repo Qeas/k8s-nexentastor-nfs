@@ -1,6 +1,6 @@
 You must extract the files in you gopath. I used $GOPATH/nexenta.
 
-After you setup you go environment someone needs to issue:
+Example usage:
 
 ``` 
  make image
@@ -27,11 +27,11 @@ po/nexenta-stor-provisioner   1/1       Running   0
 
 Create a claim:
 
-# kubectl create –f claim.yaml
+``` kubectl create –f claim.yaml```
 
 Start a pod mounting the nfs
 
-# kubectl create –f test-pod.yaml
+``` kubectl create –f test-pod.yaml```
 
 
 
