@@ -37,7 +37,7 @@ Start a pod mounting the nfs
 
 That’s it! You should see the pod started and mounting the PV:
 
-enikher@k8s-2:~/nexenta$ kubectl exec -it test-pod sh
+``` kubectl exec -it test-pod sh
 
 / # df -h
 
@@ -63,3 +63,4 @@ tmpfs                     5.9G         0      5.9G   0% /proc/timer_stats
 tmpfs                     5.9G         0      5.9G   0% /proc/sched_debug
 tmpfs                     5.9G         0      5.9G   0% /sys/firmware
 / #
+```
