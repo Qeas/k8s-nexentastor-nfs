@@ -1,20 +1,22 @@
-You must extract the files in you gopath. I used #GOPATH/nexenta.
+You must extract the files in you gopath. I used $GOPATH/nexenta.
 
 After you setup you go environment someone needs to issue:
 
-# make image
+``` 
+ make image
 
-# kubectl create –f class.yaml
+ kubectl create –f class.yaml
 
-# kubectl create –f clusterrole.yaml
+ kubectl create –f clusterrole.yaml
 
-# kubectl create –f clusterrolebinding.yaml
+ kubectl create –f clusterrolebinding.yaml
 
-# kubectl create –f serviceaccount.yaml
+ kubectl create –f serviceaccount.yaml
+ ```
 
 Check variable in pod.yaml and create a pool with the name give in pod.yaml NEXENTA_HOSTPOOL on the nexenta-stor (I used nexenta fusion but I guess it is as well possible through ssh/rest)
 
-# kubectl create –f pod.yaml
+``` kubectl create –f pod.yaml```
 
 
 You should see:
